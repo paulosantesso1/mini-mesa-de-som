@@ -3,6 +3,7 @@ from __future__ import annotations
 import types
 import tempfile
 import unittest
+import unittest.mock
 from unittest.mock import Mock, patch
 from pathlib import Path
 
@@ -100,6 +101,47 @@ class VoiceControlTests(unittest.TestCase):
             self.assertEqual(frame.voice_preset_choice.enabled, enabled)
             self.assertEqual(frame.voice_pitch.enabled, enabled)
             self.assertEqual(frame.voice_compatibility.enabled, enabled)
+
+
+class GroupedProcessSelectionTests(unittest.TestCase):
+    def test_checking_a_group_selects_every_pid_of_the_program(self) -> None:
+        from mini_mesa.process_audio import ProcessItem
+
+        frame = types.SimpleNamespace(
+            _process_items=(
+                ProcessItem(10, "chrome.exe", (10, 11, 12)),
+                ProcessItem(5, "player.exe"),
+                ProcessItem(20, "edge.exe", (20, 21)),
+            ),
+            process_list=types.SimpleNamespace(GetCheckedItems=lambda: (0, 1)),
+        )
+
+        self.assertEqual(
+            ui.MainFrame._selected_process_pids(frame), (10, 11, 12, 5)
+        )
+
+    def test_refresh_keeps_a_group_checked_when_any_saved_pid_matches(self) -> None:
+        from mini_mesa.process_audio import ProcessItem
+
+        checks: dict[int, bool] = {}
+        items = (
+            ProcessItem(10, "chrome.exe", (10, 11)),
+            ProcessItem(5, "player.exe"),
+        )
+        frame = types.SimpleNamespace(
+            _selected_process_pids=lambda: (),
+            preferences=types.SimpleNamespace(transmitted_processes=(11,)),
+            process_list=types.SimpleNamespace(
+                Set=lambda labels: None, Check=checks.__setitem__
+            ),
+            _format_process_item_label=ui.MainFrame._format_process_item_label,
+        )
+        with unittest.mock.patch.object(
+            ui, "list_candidate_processes", return_value=items
+        ):
+            ui.MainFrame._refresh_processes(frame)
+
+        self.assertEqual(checks, {0: True, 1: False})
 
 
 class ProcessSelectionAnnouncementTests(unittest.TestCase):
