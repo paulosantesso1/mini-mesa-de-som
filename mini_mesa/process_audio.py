@@ -42,12 +42,21 @@ def _hidden_subprocess_options() -> dict[str, object]:
 
 @dataclass(frozen=True, slots=True)
 class ProcessItem:
+    """One selectable program: every running PID of the same executable."""
+
     pid: int
     name: str
+    pids: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.pids:
+            object.__setattr__(self, "pids", (self.pid,))
 
     @property
     def label(self) -> str:
-        return f"{self.name} (PID {self.pid})"
+        if len(self.pids) == 1:
+            return f"{self.name} (PID {self.pid})"
+        return f"{self.name} ({len(self.pids)} processos)"
 
 
 def list_candidate_processes() -> tuple[ProcessItem, ...]:
@@ -62,7 +71,8 @@ def list_candidate_processes() -> tuple[ProcessItem, ...]:
         )
     except (OSError, subprocess.SubprocessError):
         return ()
-    items: list[ProcessItem] = []
+    groups: dict[str, list[int]] = {}
+    names: dict[str, str] = {}
     for row in csv.reader(io.StringIO(completed.stdout)):
         if len(row) < 2 or row[0].casefold() in _EXCLUDED:
             continue
@@ -71,8 +81,16 @@ def list_candidate_processes() -> tuple[ProcessItem, ...]:
         except ValueError:
             continue
         if pid > 0:
-            items.append(ProcessItem(pid, row[0]))
-    return tuple(sorted(items, key=lambda item: (item.name.casefold(), item.pid)))
+            key = row[0].casefold()
+            names.setdefault(key, row[0])
+            groups.setdefault(key, []).append(pid)
+    # Browsers and similar programs run many PIDs.  Offer one entry per program
+    # and select all of them; the native helper keeps only the root of each
+    # process tree, so the same audio is never captured twice.
+    return tuple(
+        ProcessItem(min(pids), names[key], tuple(sorted(pids)))
+        for key, pids in sorted(groups.items())
+    )
 
 
 def _helper_path() -> Path | None:

@@ -2772,20 +2772,22 @@ class MainFrame(wx.Frame):
             set(self._selected_process_pids())
             or set(self.preferences.transmitted_processes)
         )
+        checked = lambda item: bool(selected.intersection(item.pids))
         self._process_items = list_candidate_processes()
         labels = [
-            self._format_process_item_label(item, item.pid in selected)
+            self._format_process_item_label(item, checked(item))
             for item in self._process_items
         ]
         self.process_list.Set(labels)
         for index, item in enumerate(self._process_items):
-            self.process_list.Check(index, item.pid in selected)
+            self.process_list.Check(index, checked(item))
 
     def _selected_process_pids(self) -> tuple[int, ...]:
         return tuple(
-            self._process_items[index].pid
+            pid
             for index in self.process_list.GetCheckedItems()
             if 0 <= index < len(self._process_items)
+            for pid in self._process_items[index].pids
         )
 
     def _refresh_devices(self) -> None:

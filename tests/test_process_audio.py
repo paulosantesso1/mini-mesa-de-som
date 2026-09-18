@@ -67,3 +67,19 @@ def test_process_source_records_an_underflow_after_it_is_primed() -> None:
     np.testing.assert_allclose(rendered[:2], 0.25)
     np.testing.assert_array_equal(rendered[2:], np.zeros((2, 2), dtype=np.float32))
     assert source.underflow_count == 1
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Comportamento específico do Windows")
+def test_processes_of_the_same_program_are_grouped_into_one_item() -> None:
+    completed = Mock(stdout=(
+        '"chrome.exe","30","Console","1 K"\n'
+        '"player.exe","5","Console","1 K"\n'
+        '"Chrome.exe","10","Console","1 K"\n'
+    ))
+    with patch("mini_mesa.process_audio.subprocess.run", return_value=completed):
+        processes = list_candidate_processes()
+
+    assert [item.name for item in processes] == ["chrome.exe", "player.exe"]
+    assert processes[0].pids == (10, 30)
+    assert processes[0].label == "chrome.exe (2 processos)"
+    assert processes[1].label == "player.exe (PID 5)"
